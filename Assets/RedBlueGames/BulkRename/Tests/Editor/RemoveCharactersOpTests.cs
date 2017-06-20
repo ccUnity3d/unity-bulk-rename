@@ -29,9 +29,26 @@
             // Arrange
             var name = "A!@#$%BD*(";
             var removeCharactersOp = new RemoveCharactersOperation();
-            removeCharactersOp.Characters = "!@#$%^&*()";
+            removeCharactersOp.CurrentPreset = RemoveCharactersOperation.Symbols;
 
             var expected = "ABD";
+
+            // Act
+            string result = removeCharactersOp.Rename(name, 0);
+
+            // Assert
+            Assert.AreEqual(expected, result);
+        }
+
+        [Test]
+        public void RemoveCharacters_RemoveSymbols_RemovesAllSymbols()
+        {
+            // Arrange
+            var name = "`~!@#$%^&*()_+-=[]{}\\|;:'\",<.>/?";
+            var removeCharactersOp = new RemoveCharactersOperation();
+            removeCharactersOp.CurrentPreset = RemoveCharactersOperation.Symbols;
+
+            var expected = "";
 
             // Act
             string result = removeCharactersOp.Rename(name, 0);

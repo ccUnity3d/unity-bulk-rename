@@ -30,27 +30,31 @@ namespace RedBlueGames.BulkRename
     using UnityEngine;
 
     /// <summary>
-    /// RenameOperation that removes specific characters from the names.
+    /// RenameOperation used to replace substrings from the rename string.
     /// </summary>
     public class RemoveCharactersOperation : BaseRenameOperation
     {
+        public static readonly CharacterPreset Symbols = new CharacterPreset("`~!@#$%^&*()_+-=[]{}\\|;:'\",<.>/?", false);
+        public static readonly CharacterPreset Numbers = new CharacterPreset("1234567890", false);
+        private CharacterPreset Custom = new CharacterPreset(string.Empty, false);
+
         /// <summary>
-        /// Initializes a new instance of the <see cref="RedBlueGames.BulkRename.RemoveCharactersOperation"/> class.
+        /// Initializes a new instance of the <see cref="RedBlueGames.BulkRename.ReplaceStringOperation"/> class.
         /// </summary>
         public RemoveCharactersOperation()
         {
-            this.Characters = string.Empty;
-            this.IsCaseSensitive = false;
+            this.Initialize();
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="RedBlueGames.BulkRename.RemoveCharactersOperation"/> class.
+        /// Initializes a new instance of the <see cref="RedBlueGames.BulkRename.ReplaceStringOperation"/> class.
+        /// This is a clone constructor, copying the values from one to another.
         /// </summary>
         /// <param name="operationToCopy">Operation to copy.</param>
         public RemoveCharactersOperation(RemoveCharactersOperation operationToCopy)
         {
-            this.Characters = operationToCopy.Characters;
-            this.IsCaseSensitive = operationToCopy.IsCaseSensitive;
+            this.Initialize();
+            this.CurrentPreset = operationToCopy.CurrentPreset;
         }
 
         /// <summary>
@@ -77,19 +81,6 @@ namespace RedBlueGames.BulkRename
             }
         }
 
-        /// <summary>
-        /// Gets or sets the characters to remove.
-        /// </summary>
-        /// <value>The characters.</value>
-        public string Characters { get; set; }
-
-        /// <summary>
-        /// Gets or sets a value indicating whether this instance searches for the characters using case sensitivity.
-        /// </summary>
-        /// <value><c>true</c> if the search is case sensitive; otherwise, <c>false</c>.</value>
-        public bool IsCaseSensitive { get; set; }
-
-        /// <summary>
         /// Gets the heading label for the Rename Operation.
         /// </summary>
         /// <value>The heading label.</value>
@@ -98,6 +89,26 @@ namespace RedBlueGames.BulkRename
             get
             {
                 return "Remove Characters";
+            }
+        }
+
+        public CharacterPreset CurrentPreset { get; set; }
+
+        private List<CharacterPresetOption> Presets { get; set; }
+
+        private int SelectedPresetIndex
+        {
+            get
+            {
+                for (int i = 0; i < this.Presets.Count; ++i)
+                {
+                    if (this.CurrentPreset == this.Presets[i].Preset)
+                    {
+                        return i;
+                    }
+                }
+
+                return -1;
             }
         }
 
@@ -119,14 +130,16 @@ namespace RedBlueGames.BulkRename
         /// <returns>A new string renamed according to the rename operation's rules.</returns>
         public override string Rename(string input, int relativeCount)
         {
-            if (!string.IsNullOrEmpty(this.Characters))
+            if (!string.IsNullOrEmpty(this.CurrentPreset.Characters))
             {
-                var regexOptions = this.IsCaseSensitive ? default(RegexOptions) : RegexOptions.IgnoreCase;
+                var regexOptions = this.CurrentPreset.IsCaseSensitive ? default(RegexOptions) : RegexOptions.IgnoreCase;
                 var replacement = string.Empty;
 
                 try
                 {
-                    var regexPattern = Regex.Escape(this.Characters);
+                    var regexPattern = this.CurrentPreset.Characters;
+                    regexPattern = Regex.Escape(regexPattern);
+
                     var charactersAsRegex = string.Concat("[", regexPattern, "]");
                     return Regex.Replace(input, charactersAsRegex, replacement, regexOptions);
                 }
@@ -141,16 +154,82 @@ namespace RedBlueGames.BulkRename
             }
         }
 
+        public void SetCustomPresets(string characters, bool isCaseSensitive)
+        {
+            this.CurrentPreset = this.Custom;
+            this.Custom.Characters = characters;
+            this.Custom.IsCaseSensitive = isCaseSensitive;
+        }
+
         /// <summary>
         /// Draws the contents of the Rename Op using EditorGUILayout.
         /// </summary>
         protected override void DrawContents()
-        {   
+        {
+            var presetsContent = new GUIContent("Preset", "Select a preset or specify your own characters with Custom.");
+            var names = new List<GUIContent>(this.Presets.Count);
+            foreach (var preset in this.Presets)
+            {
+                names.Add(new GUIContent(preset.DisplayName));
+            }
+            var selectedIndex = EditorGUILayout.Popup(presetsContent, this.SelectedPresetIndex, names.ToArray());
+            this.CurrentPreset = this.Presets[selectedIndex].Preset;
+
+            EditorGUI.BeginDisabledGroup(this.CurrentPreset != this.Custom);
             var charactersFieldContent = new GUIContent("Characters to Remove", "All characters that will be removed from the names.");
-            this.Characters = EditorGUILayout.TextField(charactersFieldContent, this.Characters);
+            this.CurrentPreset.Characters = EditorGUILayout.TextField(charactersFieldContent, this.CurrentPreset.Characters);
 
             var caseSensitiveToggleContent = new GUIContent("Case Sensitive", "Flag the search to match only the specified case");
-            this.IsCaseSensitive = EditorGUILayout.Toggle(caseSensitiveToggleContent, this.IsCaseSensitive);
+            this.CurrentPreset.IsCaseSensitive = EditorGUILayout.Toggle(caseSensitiveToggleContent, this.CurrentPreset.IsCaseSensitive);
+            EditorGUI.EndDisabledGroup();
+        }
+
+        private void Initialize()
+        {
+            this.Presets = new List<CharacterPresetOption>
+            {
+                new CharacterPresetOption("Symbols", Symbols),
+                new CharacterPresetOption("Numbers", Numbers),
+                new CharacterPresetOption("Custom", Custom),
+            };
+
+            this.CurrentPreset = Symbols;
+        }
+
+        private class CharacterPresetOption
+        {
+            public string DisplayName { get; set; }
+
+            public CharacterPreset Preset { get; set; }
+
+            public CharacterPresetOption(string displayName, CharacterPreset preset)
+            {
+                this.DisplayName = displayName;
+                this.Preset = preset;
+            }
+        }
+
+        public class CharacterPreset
+        {
+            public string Characters { get; set; }
+
+            /// <summary>
+            /// Gets or sets a value indicating whether the characters are matched using case sensitivity.
+            /// </summary>
+            /// <value><c>true</c> if search is case sensitive; otherwise, <c>false</c>.</value>
+            public bool IsCaseSensitive { get; set; }
+
+            public CharacterPreset()
+            {
+                this.Characters = string.Empty;
+                this.IsCaseSensitive = false;
+            }
+
+            public CharacterPreset(string characters, bool caseSensitive)
+            {
+                this.Characters = characters;
+                this.IsCaseSensitive = caseSensitive;
+            }
         }
     }
 }
